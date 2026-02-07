@@ -1,3 +1,5 @@
+console.log("PORT environment variable:", process.env.PORT);
+
 const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
