@@ -1,70 +1,81 @@
-console.log("PORT environment variable:", process.env.PORT);
-
 const express = require('express');
 const axios = require('axios');
-const dotenv = require('dotenv');
-
-dotenv.config();
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Health check route
-app.get('/', (req, res) => res.send('Proxy is running!'));
+const CLIENT_ID = process.env.FATSECRET_CLIENT_ID;
+const CLIENT_SECRET = process.env.FATSECRET_CLIENT_SECRET;
+
+let accessToken = null;
+let tokenExpiresAt = 0;
+
+// Get OAuth2 token
+async function getAccessToken() {
+  if (accessToken && Date.now() < tokenExpiresAt) {
+    return accessToken;
+  }
+
+  const response = await axios.post(
+    'https://oauth.fatsecret.com/connect/token',
+    new URLSearchParams({
+      grant_type: 'client_credentials',
+      scope: 'basic'
+    }),
+    {
+      auth: {
+        username: CLIENT_ID,
+        password: CLIENT_SECRET
+      }
+    }
+  );
+
+  accessToken = response.data.access_token;
+  tokenExpiresAt = Date.now() + response.data.expires_in * 1000;
+
+  return accessToken;
+}
+
+// Health check
+app.get('/', (req, res) => {
+  res.send('FatSecret proxy running');
+});
 
 // Search endpoint
 app.post('/search', async (req, res) => {
-  const query = req.body.query;
-  console.log("Incoming search request:", query);
+  const { query } = req.body;
 
   if (!query) {
-    return res.status(400).json({ error: "Missing 'query' in request body" });
-  }
-
-  const key = process.env.FATSECRET_CLIENT_ID;
-  const secret = process.env.FATSECRET_CLIENT_SECRET;
-
-
-  if (!key || !secret) {
-    console.error("Missing FatSecret credentials in environment variables");
-    return res.status(500).json({ error: "FatSecret credentials not set" });
+    return res.status(400).json({ error: "Missing query" });
   }
 
   try {
-    // Log parameters
-    console.log("FatSecret request params:", {
-      method: 'foods.search',
-      search_expression: query,
-      format: 'json',
-      oauth_consumer_key: key,
-      oauth_consumer_secret: secret
-    });
+    const token = await getAccessToken();
 
-    // Make the FatSecret API request
-    const response = await axios.get('https://platform.fatsecret.com/rest/server.api', {
-      params: {
-        method: 'foods.search',
-        search_expression: query,
-        format: 'json',
-        oauth_consumer_key: key,
-        oauth_consumer_secret: secret
-      },
-      timeout: 10000 // 10 seconds
-    });
+    const response = await axios.get(
+      'https://platform.fatsecret.com/rest/foods/search/v3',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        params: {
+          search_expression: query,
+          max_results: 20
+        }
+      }
+    );
 
-    console.log("FatSecret response received");
     res.json(response.data);
 
   } catch (err) {
-    console.error("Error contacting FatSecret:", err.message);
-    if (err.response) {
-      console.error("FatSecret status:", err.response.status);
-      console.error("FatSecret data:", err.response.data);
-    }
-    res.status(500).json({ error: err.message });
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: 'FatSecret request failed' });
   }
 });
 
-app.listen(PORT, () => console.log(`Proxy server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Proxy server running on port ${PORT}`);
+});
