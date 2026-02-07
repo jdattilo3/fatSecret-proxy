@@ -23,8 +23,9 @@ app.post('/search', async (req, res) => {
     return res.status(400).json({ error: "Missing 'query' in request body" });
   }
 
-  const key = process.env.FATSECRET_KEY;
-  const secret = process.env.FATSECRET_SECRET;
+  const key = process.env.FATSECRET_CLIENT_ID;
+  const secret = process.env.FATSECRET_CLIENT_SECRET;
+
 
   if (!key || !secret) {
     console.error("Missing FatSecret credentials in environment variables");
