@@ -70,10 +70,22 @@ app.post('/search', async (req, res) => {
 
     res.json(response.data);
 
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: 'FatSecret request failed' });
+  } } catch (err) {
+  console.error("====== FATSECRET ERROR ======");
+
+  if (err.response) {
+    console.error("Status:", err.response.status);
+    console.error("Headers:", err.response.headers);
+    console.error("Raw response:", err.response.data);
+
+    // Send FatSecret's raw response back to the client
+    res.status(500).send(err.response.data);
+  } else {
+    console.error("Message:", err.message);
+    res.status(500).json({ error: err.message });
   }
+}
+
 });
 
 app.listen(PORT, () => {
